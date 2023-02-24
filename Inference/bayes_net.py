@@ -1,4 +1,4 @@
-from typing import List, Dict, Tuple
+from typing import List, Dict, Tuple, Callable, Any
 
 names_given = 0
 def next_name():
@@ -21,31 +21,52 @@ def indexify(assignment: Assignment) -> int:
     # Remember Python lists are 0 indexed
     return index-1
 
-# TODO: allow a list of discrete values
-class CDT:
-    def __init__(self, dists: List[List[float]], vals: List[str] = None):
+# class CDT:
+#     def __init__(self, dists: List[List[float]], vals: List[str] = None):
+#         self.dists = dists
+#         if vals is None:
+#             vals = ["Val%d"%i for i in range(len(dists[0]))]
+#         self.vals = vals
+
+class Variable_Node: pass
+
+Discrete_Dist = Dict[Any, float]
+
+class Discrete_CDT:
+    def __init__(self, parents: List[Variable_Node], dists: Callable[[Tuple], Discrete_Dist]):
+        self.parents = parents
         self.dists = dists
-        if vals is None:
-            vals = ["Val%d"%i for i in range(len(dists[0]))]
-        self.vals = vals
+
+    def __call__(self, pvalues: Tuple) -> Discrete_Dist:
+        return self.dists(pvalues)
+    
+    def getParents(self):
+        return self.parents
+    
+    def evaluate_fully_conditioned(self):
+        return self.dists(tuple([p.value for p in self.parents]))
+
+
 
 #CDT = List[float]
 
-def dict_to_CDT(readable: List[Tuple[Assignment, float]]) -> CDT:
-    cdt = [0 for i in len(readable)]
-    for assignment, probability in readable:
-        cdt[indexify(assignment)] = probability
+# def dict_to_CDT(readable: List[Tuple[Assignment, float]]) -> CDT:
+#     cdt = [0 for i in len(readable)]
+#     for assignment, probability in readable:
+#         cdt[indexify(assignment)] = probability
+
 
 class Variable_Node:
-    def __init__(self, parents : list, cdt: CDT, name=None): # TODO: list should be list[Variable_Node] ideally
+    def __init__(self, cdt: Discrete_CDT, name=None): # TODO: continuous CDTs?
         if name is None:
             name = next_name()
-        self.parents = parents
+        self.parents = cdt.getParents()
         self.cdt = cdt
         self.name = name
         self.children = []
         for p in self.parents:
             p.children.append(self)
+        self.value = None
 
     def __repr__(self):
         string = "Node %s\n" % self.name
@@ -56,34 +77,45 @@ class Variable_Node:
         for c in self.children:
             string += "%s " % c.name
         return string
+    
+    def get_fully_conditioned_dist(self):
+        return self.cdt.evaluate_fully_conditioned()
         
 
     # TODO: dict is used instead of set because soon any discrete values
     # will be allowed.
-    def fully_conditioned_dist(self, parent_vals: Dict[str, bool]):
-        assignment = [parent_vals[p.name] for p in self.parents]
-        return self.cdt.dists[indexify(assignment)]
+    # def fully_conditioned_dist(self, parent_vals: Dict[str, bool]):
+    #     assignment = [parent_vals[p.name] for p in self.parents]
+    #     return self.cdt.dists[indexify(assignment)]
 
-    def get_value_names(self):
-        return self.cdt.vals
+
+    # TODO: Make the below implementable and implement it
+    # def get_value_names(self):
+    #     return self.cdt.vals
+
     
 def main():
     coinFlip = Variable_Node(
-        parents=[],
-        cdt=CDT([[0.5,0.5]], ["H","T"]),
+        cdt=Discrete_CDT(
+                [],
+                lambda _: {"H":0.5, "T":0.5},
+            ),
         name="coin flip",
     )
     resultCalled = Variable_Node(
-        parents=[coinFlip],
-        cdt=CDT([[0.99,0.01],[0.01,0.99]], ["H","T"]),
-        name="result called"
+        cdt=Discrete_CDT(
+                [coinFlip],
+                lambda r: {"H":0.99, "T":0.01} if r[0]=="H" else {"H":0.01, "T":0.99},
+            ),
+        name="result called",
     )
     print(coinFlip)
     print(resultCalled)
-    print("If %s comes up H" % (coinFlip.name))
-    resultDist = resultCalled.fully_conditioned_dist({coinFlip.name:True})
-    for i, name in enumerate(resultCalled.get_value_names()):
-        print("%s is %s with probability %.2f" % (resultCalled.name, name, resultDist[i]))
+    coinFlip.value = "H"
+    print("If %s comes up %s" % (coinFlip.name, coinFlip.value))
+    resultDist = resultCalled.get_fully_conditioned_dist()
+    for k in resultDist.keys():
+        print("%s is %s with probability %.2f" % (resultCalled.name, k, resultDist[k]))
 
 if __name__ == "__main__":
     main()
