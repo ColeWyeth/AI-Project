@@ -131,6 +131,19 @@ class Variable_Node:
     # def get_value_names(self):
     #     return self.cdt.vals
 
+class Bayes_Net:
+    def __init__(self, nodes: List[Variable_Node]):
+        self.nodes = nodes
+
+    def P(self, values: List[Any], cond=[]):
+        for i, node in enumerate(self.nodes):
+            node.value = values[i]
+        p = 1
+        for node in self.nodes:
+            p *= node.get_fully_conditioned_dist()[node.value]
+        # if cond:
+        #     return p/self.P(values.extend(cond)) 
+        return p
     
 def main():
     coinFlip = Variable_Node(
@@ -156,6 +169,11 @@ def main():
     resultDist = resultCalled.get_fully_conditioned_dist()
     for k in resultDist.keys():
         print("%s is %s with probability %.2f" % (resultCalled.name, k, resultDist[k]))
+    bn = Bayes_Net([coinFlip, resultCalled])
+    
+    print("Probability of H flipped and reported: %.3f" % (bn.P(["H","H"])))
+    print("Probability of H flipped but not reported: %.3f" % (bn.P(["H","T"])))
+    #print("Probability of H flipped given H reported: %f", )
 
 if __name__ == "__main__":
     main()
