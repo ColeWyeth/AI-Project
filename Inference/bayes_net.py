@@ -33,12 +33,45 @@ class Variable_Node: pass
 Discrete_Dist = Dict[Any, float]
 
 class Discrete_CDT:
-    def __init__(self, parents: List[Variable_Node], dists: Callable[[Tuple], Discrete_Dist]):
+    # TODO: if I made the second argument a dict, I could extract the third. But this may be less extensible. 
+    def __init__(self, parents: List[Variable_Node], dists: Callable[[Tuple], Discrete_Dist], values: List):
         self.parents = parents
         self.dists = dists
+        self.values = values
 
     def __call__(self, pvalues: Tuple) -> Discrete_Dist:
         return self.dists(pvalues)
+
+    def __repr__(self):
+        string = ""
+        for p in self.parents:
+            string += "%s " % (p.name)
+        string += "| "
+        for v in self.values:
+            string += "%s " % (str(v))
+        line_length = len(string)-1
+        string += "\n"
+        string += line_length*"-"
+        string += "\n"
+        def helper(first_ind):
+            if not first_ind < len(self.parents):
+                return [[]]
+            conditions = []
+            tail_assignments = helper(first_ind+1)
+            for v in self.parents[first_ind].get_values():
+                conditions.extend([[v]+l for l in tail_assignments])
+            return conditions
+        conditions = helper(0)
+        for condition in conditions:
+            for val in condition:
+                string += "%s " % (str(val))
+            string += "| "
+            dist = self.dists(tuple(condition))
+            print(dist)
+            for val in self.values:
+                string += "%.2f " % (dist[val])
+            string += "\n"
+        return string
     
     def getParents(self):
         return self.parents
@@ -76,10 +109,15 @@ class Variable_Node:
         string += "\nChildren: "
         for c in self.children:
             string += "%s " % c.name
+        string += "\n"
+        string += str(self.cdt)
         return string
     
     def get_fully_conditioned_dist(self):
         return self.cdt.evaluate_fully_conditioned()
+    
+    def get_values(self):
+        return self.cdt.values
         
 
     # TODO: dict is used instead of set because soon any discrete values
@@ -99,15 +137,17 @@ def main():
         cdt=Discrete_CDT(
                 [],
                 lambda _: {"H":0.5, "T":0.5},
+                values=["H","T"],
             ),
-        name="coin flip",
+        name="coinFlip",
     )
     resultCalled = Variable_Node(
         cdt=Discrete_CDT(
                 [coinFlip],
                 lambda r: {"H":0.99, "T":0.01} if r[0]=="H" else {"H":0.01, "T":0.99},
+                values=["H","T"],
             ),
-        name="result called",
+        name="resultCalled",
     )
     print(coinFlip)
     print(resultCalled)
