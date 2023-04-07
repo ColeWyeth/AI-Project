@@ -98,7 +98,7 @@ Generative_Rules = {
     ],
 
     Sym.INT_EXP : [
-        (Sym.INT_OP, [Sym.INT_EXP, Sym.INT_EXP]),
+        (Sym.INT_OP, []),
         (Sym.INT_BASIC, []),
     ],
 
@@ -152,17 +152,70 @@ def g_sugar(block, abstract_syntax):
 def g_printer(block):
     return Block.rec_block_printer(block, g_sugar)
 
+
 # The proper way to call an unbounded runtime block
 # is to create a thread to run the interpreter and kill it 
 # after some maximum runtime. 
+def evaluate_int(block):
+    if block.symbol == Sym.MULT:
+        return evaluate_int(block.children[0])*evaluate_int(block.children[1])
+    elif block.symbol == Sym.PLUS:
+        return evaluate_int(block.children[0])+evaluate_int(block.children[1])
+    elif block.symbol in variable_symbols:
+        return block.var.get()
+    elif block.symbol == Sym.ONE:
+        return 1
+    elif block.symbol == Sym.NEG_ONE:
+        return -1
+    elif block.symbol == Sym.RAND_INT:
+        num = 0
+        cont = random.choice([True, False])
+        while cont:
+            num += 1
+            cont = random.choice([True, False])
+        return num
+
+
+def evaluate_bool(block):
+    if block.symbol == Sym.LESS:
+        return evaluate_int(block.children[0]) < evaluate_int(block.children[1])
+    elif block.symbol == Sym.EQUAL:
+        return evaluate_int(block.children[0]) == evaluate_int(block.children[1])
+    elif block.symbol == Sym.AND:
+        return evaluate_bool(block.children[0]) and evaluate_bool(block.children[1])
+    elif block.symbol == Sym.OR:
+        return evaluate_bool(block.children[0]) or evaluate_bool(block.children[1])
+    elif block.symbol == Sym.NEG_BOOL:
+        return not evaluate_bool(block.children[0])
+    elif block.symbol == Sym.TRUE:
+        return True
+    elif block.symbol == Sym.FALSE:
+        return False
+    elif block.symbol in variable_symbols:
+        return block.var.get()
+    elif block.symbol == Sym.RAND_BOOL:
+        return random.choice([True, False])
+
 def g_interpreter(block):
-    pass
+    if block.symbol == Sym.PASS:
+        pass
+    elif block.symbol == Sym.SEQ:
+        for c in block.children:
+            g_interpreter(c)
+    elif block.symbol == Sym.GETS:
+        g_interpreter(block.children[0])
+    elif block.symbol == Sym.BOOL_BINDING:
+        block.children[0].var.set(evaluate_bool(block.children[1]))
+    elif block.symbol == Sym.INT_BINDING:
+        block.children[0].var.set(evaluate_int(block.children[1]))
+    else:
+        pass 
 
 # The combination of CFG and interpreter should "plug in" to the program class. Ideally the search process 
 # with also work for an arbitrary CFG and interpreter. 
 
 
-def baseline_random_search(g : CFG, p: Program, s : Sym = -1, int_regs : int = 2, bool_regs : int = 2):
+def baseline_random_search(g : CFG, p: Program, s : Sym = -1, int_regs : int = 1, bool_regs : int = 1):
     for i in range(int_regs):
         p.add_int_local()
     for i in range(bool_regs):
@@ -179,11 +232,12 @@ def random_block_search(g : CFG, p : Program, s : Sym = -1):
         # Each length increase should have probability 1/2
         # Roughly speaking, this means a symbol with n children
         # should be 2^n times less likely. 
-        undo = False
-        for c in children:
-            undo = undo or random.choice([True, False])
-        if not undo:
-            s = cand_s
+        # undo = False
+        # for c in children:
+        #     undo = undo or random.choice([True, False])
+        # if not undo:
+        #     s = cand_s
+        s = cand_s
     b = Block(s)
     for c in children:
         # the children of a block should be blocks
@@ -197,10 +251,30 @@ def main():
         {int: [Box(int, "X")], bool : [] },
         {int : [Box(int, "Y")], bool : []},
     )
-    p.ins[int][0].gets(1)
+    p.ins[int][0].set(21)
     p.block = baseline_random_search(Generative, p)
+    # b = Block(Sym.GETS)
+    # a = Block(Sym.INT_BINDING)
+    # y = Block(Sym.WINDOW_INT)
+    # y.var = p.outs[int][0]
+    # x = Block(Sym.WINDOW_INT)
+    # x.var = p.ins[int][0]
+    # a.children = [y,x]
+    # b.children = [a]
+    # p.block = b
+    # print(g_printer(p.block))
+    # g_interpreter(p.block)
+    # print(p.outs[int][0].get())
+    while True:
+        p.ins[int][0].set(2)
+        try:
+            p.block = baseline_random_search(Generative, p)
+        except RecursionError:
+            print("Maximum recursion depth exceeded...")
+        g_interpreter(p.block)
+        if p.outs[int][0].get() == 2:
+            break
     print(g_printer(p.block))
-    #p.block.execute()
 
 if __name__ == "__main__":
     main()
