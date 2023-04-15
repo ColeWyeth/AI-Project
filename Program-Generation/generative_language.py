@@ -214,6 +214,14 @@ def g_interpreter(block):
         block.children[0].var.set(evaluate_bool(block.children[1]))
     elif block.symbol == Sym.INT_BINDING:
         block.children[0].var.set(evaluate_int(block.children[1]))
+    elif block.symbol == Sym.IF_THEN_ELSE:
+        if evaluate_bool(block.children[0]):
+            g_interpreter(block.children[1])
+        else:
+            g_interpreter(block.children[2])
+    elif block.symbol == Sym.WHILE:
+        while evaluate_bool(block.children[0]):
+            g_interpreter(block.children[1])
     else:
         pass 
 
@@ -328,7 +336,7 @@ def main():
             #     break
         except RecursionError:
             print("Maximum recursion depth exceeded...")
-        except KeyError:
+        except TypeError:
             print("No output from program")
     print(g_to_str(p.block))
     #print(p.outs[int][0].get())
