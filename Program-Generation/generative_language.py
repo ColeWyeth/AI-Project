@@ -4,7 +4,7 @@ import random
 
 from typing import Dict, List
 
-from program import Program, Block, Box
+from program import Program, Block, Box, run_for_time
 from cfg import CFG
 
 class Sym(enum.Enum):
@@ -217,6 +217,7 @@ def g_interpreter(block):
     else:
         pass 
 
+
 # The combination of CFG and interpreter should "plug in" to the program class. Ideally the search process 
 # with also work for an arbitrary CFG and interpreter. 
 
@@ -308,17 +309,29 @@ def main():
     # print(p.outs[int][0].get())
     for i in range(1000):
         try:
-            p.wipe_all_variables()
-            p.ins[int][0].set(10)
+            all_passed = True
             p.block = function_search(Generative, p)
-            g_interpreter(p.block)
-            if p.outs[int][0].get() == 100:
+            p.wipe_all_variables()
+            p.ins[int][0].set(3)
+            ret = run_for_time(p, g_interpreter, 1)
+            all_passed =  all_passed and (ret["windows"][int][0].get() == 9)
+            p.wipe_all_variables()
+            p.ins[int][0].set(4)
+            ret = run_for_time(p, g_interpreter, 1)
+            all_passed =  all_passed and (ret["windows"][int][0].get() == 16)
+            if all_passed:
                 print("Successful candidate!")
                 break
+            #g_interpreter(p.block)
+            # if p.outs[int][0].get() == 2:
+            #     print("Successful candidate!")
+            #     break
         except RecursionError:
             print("Maximum recursion depth exceeded...")
+        except KeyError:
+            print("No output from program")
     print(g_to_str(p.block))
-    print(p.outs[int][0].get())
+    #print(p.outs[int][0].get())
 
 if __name__ == "__main__":
     main()
