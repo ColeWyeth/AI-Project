@@ -18,19 +18,23 @@ class Box(Window):
         else:
             self.val = val
         self.name = name
+        self.type = t
     def get_name(self):
         return self.name
     def get(self):
-        return val
+        return self.val
     def set(self, val):
         self.val = val
 
 
 # A block is a partially constructed program module
 class Block:
-    def __init__(self, symbol):
+    def __init__(self, symbol, children = None):
         self.symbol = symbol
-        self.children = []
+        if children is None:
+            self.children = []
+        else:
+            self.children = children
         self.var = None
     def rec_block_printer(block, sugar = None):
         child_str = ""
@@ -72,14 +76,16 @@ class Program:
         # even if their semantics is broken because there are no windows of the right type.
         # These are effectively similar to extra locals with restricted read/write
         # TODO: Fix this better
-        if not self.ins[bool]:
-            self.ins[bool].append(Box(bool, "NOBOOLS"))
-        if not self.outs[bool]:
-            self.outs[bool].append(Box(bool, "NOBOOLS"))
-        if not self.ins[int]:
-            self.ins[int].append(Box(int, "NOINTS"))
-        if not self.outs[int]:
-            self.outs[int].append(Box(int, "NOINTS"))
+        # if not self.ins[bool]:
+        #     self.ins[bool].append(Box(bool, "NOBOOLS"))
+        # if not self.outs[bool]:
+        #     self.outs[bool].append(Box(bool, "NOBOOLS"))
+        # if not self.ins[int]:
+        #     self.ins[int].append(Box(int, "NOINTS"))
+        # if not self.outs[int]:
+        #     self.outs[int].append(Box(int, "NOINTS"))
+        self.NO_BOOLS = Box(bool, "NOBOOLS")
+        self.NO_INTS = Box(int, "NOINTS")
         self.block = None
         self.int_locals = []
         self.bool_locals = []
@@ -99,3 +105,14 @@ class Program:
         self.bool_locals.append(
             Box(bool, "Lb" + str(len(self.bool_locals))),
         )
+
+    def get_all_locals(self):
+        return self.int_locals + self.bool_locals
+    def get_all_windows(self):
+        return self.ins[int] + self.ins[bool] + self.outs[int] + self.outs[bool] 
+    def get_all_variables(self):
+        return self.get_all_locals() + self.get_all_windows() + [self.NO_BOOLS] + [self.NO_INTS]
+    def wipe_all_variables(self):
+        vars = self.get_all_variables()
+        for v in vars:
+            v.set(v.type())

@@ -128,19 +128,25 @@ variable_symbols = [
     Sym.INT_LVAL,
 ]
 
+def default_to(x, y):
+    if len(x):
+        return x
+    else:
+        return [y]
+
 def get_variable_options(p, s : Sym):
     if s == Sym.LOCAL_INT:
-        return p.int_locals
+        return default_to(p.int_locals, p.NO_INTS)
     elif s == Sym.LOCAL_BOOL:
-        return p.bool_locals
+        return default_to(p.bool_locals, p.NO_BOOLS)
     elif s == Sym.WINDOW_BOOL:
-        return p.ins[bool] + p.outs[bool]
+        return default_to(p.ins[bool] + p.outs[bool], p.NO_BOOLS)
     elif s == Sym.WINDOW_INT:
-        return p.ins[int] + p.outs[int]
+        return default_to(p.ins[int] + p.outs[int], p.NO_INTS)
     elif s == Sym.BOOL_LVAL:
-        return p.bool_locals + p.outs[bool]
+        return default_to(p.bool_locals + p.outs[bool], p.NO_BOOLS)
     elif s == Sym.INT_LVAL:
-        return p.int_locals + p.outs[int]
+        return default_to(p.int_locals + p.outs[int], p.NO_INTS)
     else:
         raise Exception("Variable symbol optionless")
 
@@ -149,7 +155,7 @@ def g_sugar(block, abstract_syntax):
         return block.var.get_name()
     return abstract_syntax
     
-def g_printer(block):
+def g_to_str(block):
     return Block.rec_block_printer(block, g_sugar)
 
 
@@ -215,12 +221,39 @@ def g_interpreter(block):
 # with also work for an arbitrary CFG and interpreter. 
 
 
-def baseline_random_search(g : CFG, p: Program, s : Sym = -1, int_regs : int = 1, bool_regs : int = 1):
-    for i in range(int_regs):
-        p.add_int_local()
-    for i in range(bool_regs):
-        p.add_bool_local()
-    return random_block_search(g, p, s)
+# def baseline_random_search(g : CFG, p: Program, s : Sym = -1, int_regs : int = 1, bool_regs : int = 1):
+    # for i in range(int_regs):
+    #     p.add_int_local()
+    # for i in range(bool_regs):
+    #     p.add_bool_local()
+    # return random_block_search(g, p, s)
+
+def function_search(g : CFG, p: Program, s : Sym = -1, int_regs : int = 1, bool_regs : int = 1):
+    """
+        This search method imposes the requirement that after running some initial code,
+        each output variable is assigned to.
+    """
+    b = Block(Sym.SEQ)
+    b.children.append(random_block_search(g, p, s))
+    assignments = None
+    for int_output in p.outs[int]:
+        y = Block(Sym.WINDOW_INT)
+        y.var = int_output
+        assign = Block(Sym.GETS, [Block(Sym.INT_BINDING, [y, random_block_search(g, p, Sym.INT_EXP)])])
+        if assignments is None:
+            assignments = assign 
+        else:
+            assignments = Block(Sym.SEQ, [assignments, assign])
+    for bool_output in p.outs[bool]:
+        y = Block(Sym.WINDOW_BOOL)
+        y.var = bool_output
+        assign = Block(Sym.GETS, [Block(Sym.BOOL_BINDING, [y, random_block_search(g, p, Sym.BOOL_EXP)])])
+        if assignments is None:
+            assignments = assign 
+        else:
+            assignments = Block(Sym.SEQ, [assignments, assign])
+    b.children.append(assignments)
+    return b
 
 def random_block_search(g : CFG, p : Program, s : Sym = -1):
     if s == -1:
@@ -232,12 +265,12 @@ def random_block_search(g : CFG, p : Program, s : Sym = -1):
         # Each length increase should have probability 1/2
         # Roughly speaking, this means a symbol with n children
         # should be 2^n times less likely. 
-        # undo = False
-        # for c in children:
-        #     undo = undo or random.choice([True, False])
-        # if not undo:
-        #     s = cand_s
-        s = cand_s
+        undo = False
+        for c in children:
+            undo = undo or random.choice([True, False])
+        if not undo:
+            s = cand_s
+        #s = cand_s
     b = Block(s)
     for c in children:
         # the children of a block should be blocks
@@ -251,8 +284,16 @@ def main():
         {int: [Box(int, "X")], bool : [] },
         {int : [Box(int, "Y")], bool : []},
     )
-    p.ins[int][0].set(21)
-    p.block = baseline_random_search(Generative, p)
+    for i in range(2):
+        p.add_int_local()
+    for i in range(2):
+        p.add_bool_local()
+    # y = Block(Sym.WINDOW_INT)
+    # y.var = p.ins[int][0]
+    # print(y)
+    # return
+    #p.ins[int][0].set(21)
+    #p.block = baseline_random_search(Generative, p)
     # b = Block(Sym.GETS)
     # a = Block(Sym.INT_BINDING)
     # y = Block(Sym.WINDOW_INT)
@@ -262,19 +303,22 @@ def main():
     # a.children = [y,x]
     # b.children = [a]
     # p.block = b
-    # print(g_printer(p.block))
+    # print(g_to_str(p.block))
     # g_interpreter(p.block)
     # print(p.outs[int][0].get())
-    while True:
-        p.ins[int][0].set(2)
+    for i in range(1000):
         try:
-            p.block = baseline_random_search(Generative, p)
+            p.wipe_all_variables()
+            p.ins[int][0].set(10)
+            p.block = function_search(Generative, p)
+            g_interpreter(p.block)
+            if p.outs[int][0].get() == 100:
+                print("Successful candidate!")
+                break
         except RecursionError:
             print("Maximum recursion depth exceeded...")
-        g_interpreter(p.block)
-        if p.outs[int][0].get() == 2:
-            break
-    print(g_printer(p.block))
+    print(g_to_str(p.block))
+    print(p.outs[int][0].get())
 
 if __name__ == "__main__":
     main()
