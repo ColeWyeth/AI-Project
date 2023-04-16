@@ -1,4 +1,8 @@
+from threading import Thread
+from time import sleep
+from multiprocessing import Process, Manager
 from typing import Dict, List
+import enum
 # from generative_language import Sym
 
 # TODO: Implement asynchronous window types
@@ -63,6 +67,12 @@ class Block:
 # They will carry a symbol and sometimes indexing information for locals and windows, as well as
 # an (often empty) list of child blocks. 
 
+class Status(enum.Enum):
+    NOTSTARTED = 0
+    RUNNING    = 1
+    STOPPED    = 2
+    FINISHED   = 3
+
 # A program manages an environment, input and output memory locations
 # (which may be anytime modifiable and readable) and a block.
 # Searching over blocks is best handled externally to the program class; 
@@ -89,12 +99,10 @@ class Program:
         self.block = None
         self.int_locals = []
         self.bool_locals = []
+        self.status = Status.NOTSTARTED
 
     def get_block(self):
         return self.block
-
-    def execute(self):
-        self.block.run()
 
     def add_int_local(self):
         self.int_locals.append(
@@ -108,11 +116,56 @@ class Program:
 
     def get_all_locals(self):
         return self.int_locals + self.bool_locals
+    
     def get_all_windows(self):
         return self.ins[int] + self.ins[bool] + self.outs[int] + self.outs[bool] 
+    
     def get_all_variables(self):
         return self.get_all_locals() + self.get_all_windows() + [self.NO_BOOLS] + [self.NO_INTS]
+    
     def wipe_all_variables(self):
         vars = self.get_all_variables()
         for v in vars:
             v.set(v.type())
+
+    def set_input(self, t : type, name : str, val):
+        for x in self.ins[t]:
+            if x.name == name:
+                x.set(val)
+                return
+        raise Exception("Variable not found")
+
+    def get_output(self, t : type, name : str):
+        for y in self.outs[t]:
+            if y.name == name:
+                return y.get()
+        raise Exception("Variable not found")
+
+
+# Blocking, run program for some maximum time
+def run_for_time(p : Program, interpreter, timeout : int):
+    manager = Manager()
+    return_dict = manager.dict()
+    def task(return_dict):
+        p.status = Status.RUNNING
+        interpreter(p.block)
+        try:
+            return_dict["outputs"] = p.outs
+        except RecursionError:
+            print("Caught pickling error")
+            p.status = Status.STOPPED
+    process = Process(target=task, args=(return_dict,))
+    #print("Starting process")
+    process.start()
+    process.join(timeout)
+    sleep(0.01)
+    if process.is_alive():
+        print("Runtime limit exceeded, force terminating process")
+        process.terminate()
+        p.status = Status.STOPPED
+    else:
+        # Copy over return values from the process
+        for t in [int, bool]:
+            for i, y in enumerate(return_dict["outputs"][t]):
+                p.outs[t][i].set(y.get()) 
+        p.status = Status.FINISHED

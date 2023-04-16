@@ -229,15 +229,31 @@ def g_interpreter(block):
 # The combination of CFG and interpreter should "plug in" to the program class. Ideally the search process 
 # with also work for an arbitrary CFG and interpreter. 
 
+def random_block_search(g : CFG, p : Program, s : Sym = -1):
+    if s == -1:
+        s = g.start
+    nonterminals = g.rules.keys()
+    children = []
+    while s in nonterminals:
+        cand_s, children = random.choice(g.rules[s])
+        # Each length increase should have probability 1/2
+        # Roughly speaking, this means a symbol with n children
+        # should be 2^n times less likely. 
+        undo = False
+        for c in children:
+            undo = undo or random.choice([True, False])
+        if not undo:
+            s = cand_s
+        #s = cand_s
+    b = Block(s)
+    for c in children:
+        # the children of a block should be blocks
+        b.children.append(random_block_search(g, p, c))
+    if b.symbol in variable_symbols:
+        b.var = random.choice(get_variable_options(p, b.symbol))
+    return b
 
-# def baseline_random_search(g : CFG, p: Program, s : Sym = -1, int_regs : int = 1, bool_regs : int = 1):
-    # for i in range(int_regs):
-    #     p.add_int_local()
-    # for i in range(bool_regs):
-    #     p.add_bool_local()
-    # return random_block_search(g, p, s)
-
-def function_search(g : CFG, p: Program, s : Sym = -1, int_regs : int = 1, bool_regs : int = 1):
+def function_search(g : CFG, p: Program, s : Sym = -1):
     """
         This search method imposes the requirement that after running some initial code,
         each output variable is assigned to.
@@ -264,30 +280,6 @@ def function_search(g : CFG, p: Program, s : Sym = -1, int_regs : int = 1, bool_
     b.children.append(assignments)
     return b
 
-def random_block_search(g : CFG, p : Program, s : Sym = -1):
-    if s == -1:
-        s = g.start
-    nonterminals = g.rules.keys()
-    children = []
-    while s in nonterminals:
-        cand_s, children = random.choice(g.rules[s])
-        # Each length increase should have probability 1/2
-        # Roughly speaking, this means a symbol with n children
-        # should be 2^n times less likely. 
-        undo = False
-        for c in children:
-            undo = undo or random.choice([True, False])
-        if not undo:
-            s = cand_s
-        #s = cand_s
-    b = Block(s)
-    for c in children:
-        # the children of a block should be blocks
-        b.children.append(random_block_search(g, p, c))
-    if b.symbol in variable_symbols:
-        b.var = random.choice(get_variable_options(p, b.symbol))
-    return b
-
 def main():
     p = Program(
         {int: [Box(int, "X")], bool : [] },
@@ -297,49 +289,25 @@ def main():
         p.add_int_local()
     for i in range(2):
         p.add_bool_local()
-    # y = Block(Sym.WINDOW_INT)
-    # y.var = p.ins[int][0]
-    # print(y)
-    # return
-    #p.ins[int][0].set(21)
-    #p.block = baseline_random_search(Generative, p)
-    # b = Block(Sym.GETS)
-    # a = Block(Sym.INT_BINDING)
-    # y = Block(Sym.WINDOW_INT)
-    # y.var = p.outs[int][0]
-    # x = Block(Sym.WINDOW_INT)
-    # x.var = p.ins[int][0]
-    # a.children = [y,x]
-    # b.children = [a]
-    # p.block = b
-    # print(g_to_str(p.block))
-    # g_interpreter(p.block)
-    # print(p.outs[int][0].get())
+    def test(x, y):
+        p.wipe_all_variables()
+        p.set_input(int, "X", x)
+        run_for_time(p, g_interpreter, 1)
+        return p.get_output(int, "Y") == y
     for i in range(1000):
         try:
-            all_passed = True
             p.block = function_search(Generative, p)
-            p.wipe_all_variables()
-            p.ins[int][0].set(3)
-            ret = run_for_time(p, g_interpreter, 1)
-            all_passed =  all_passed and (ret["windows"][int][0].get() == 9)
-            p.wipe_all_variables()
-            p.ins[int][0].set(4)
-            ret = run_for_time(p, g_interpreter, 1)
-            all_passed =  all_passed and (ret["windows"][int][0].get() == 16)
-            if all_passed:
+            passed = True
+            for x,y in [(3,9), (4,16), (5,25)]:
+                if not test(x,y):
+                    passed = False
+                    break
+            if passed:
                 print("Successful candidate!")
                 break
-            #g_interpreter(p.block)
-            # if p.outs[int][0].get() == 2:
-            #     print("Successful candidate!")
-            #     break
         except RecursionError:
             print("Maximum recursion depth exceeded...")
-        except TypeError:
-            print("No output from program")
     print(g_to_str(p.block))
-    #print(p.outs[int][0].get())
 
 if __name__ == "__main__":
     main()
