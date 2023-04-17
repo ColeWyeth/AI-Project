@@ -1,4 +1,5 @@
 from typing import List, Dict, Tuple, Callable, Any
+import enum
 
 names_given = 0
 def next_name():
@@ -118,7 +119,54 @@ class Variable_Node:
     
     def get_values(self):
         return self.cdt.values
-        
+
+class Color(enum.Enum):
+    WHITE = 0
+    GRAY  = 1
+    BLACK = 2
+
+class Painter:
+    def __init__(self, nodes : List[Variable_Node]):
+        self.colors = dict()
+        for n in nodes:
+            self.colors[n] = Color.WHITE
+    def paint(self, n : Variable_Node, color : Color):
+        print("Painting node %s %s" % (n.name, color.name))
+        self.colors[n] = color
+    def color(self, n : Variable_Node):
+        return self.colors[n]
+
+def DFS_VISIT(n : Variable_Node, painter : Painter):
+    painter.paint(n, Color.GRAY)
+    for c in n.children:
+        if painter.color(c) == Color.WHITE:
+            print("Node %s is white, will visit" % c.name)
+            DFS_VISIT(c, painter)
+    painter.paint(n, Color.BLACK)
+
+def DFS(nodes : List[Variable_Node], painter : Painter):
+    for n in nodes:
+        if painter.color(n) == Color.WHITE:
+            DFS_VISIT(n, painter)
+
+class TopSortPainter(Painter):
+    def __init__(self, nodes : List[Variable_Node]):
+        self.sorted = []
+        super().__init__(nodes)
+
+    def paint(self, n : Variable_Node, color : Color):
+        if color == Color.BLACK:
+            self.sorted.append(n)
+        super().paint(n,color)
+
+    def get_sorted(self):
+        self.sorted.reverse()
+        return self.sorted
+    
+def TOPSORT(nodes : List[Variable_Node]):
+    tsp = TopSortPainter(nodes)
+    DFS(nodes, tsp)
+    return tsp.get_sorted()
 
     # TODO: dict is used instead of set because soon any discrete values
     # will be allowed.
@@ -133,7 +181,7 @@ class Variable_Node:
 
 class Bayes_Net:
     def __init__(self, nodes: List[Variable_Node]):
-        self.nodes = nodes
+        self.nodes = TOPSORT(nodes)
 
     def P(self, values: List[Any], cond=[]):
         for i, node in enumerate(self.nodes):
@@ -145,6 +193,54 @@ class Bayes_Net:
         #     return p/self.P(values.extend(cond)) 
         return p
     
+    def enumeration_ask(self, X : str, e : Dict[str, Any]):
+        """
+        Return a posterior distribution for X given the assignments in e. 
+        Each variable is referred to by name. 
+        """
+        x = None
+        for n in self.nodes:
+            if n.name == X:
+                x = n
+            if n.name in e.keys():
+                n.value = e[n.name]
+        possible_values = x.get_values()
+        dist = dict()
+        if x.name in e.keys():
+            for v in possible_values:
+                if v == x.value:
+                    dist[v] = 1.0
+                else:
+                    dist[v] = 0.0
+            return dist
+        else:
+            for v in possible_values:
+                ep = e.copy()
+                # x is currently being conditioned on
+                # so its value should not summed over
+                ep[x.name] = x.value 
+                x.value = v
+                dist[v] = self.enumerate_all(self.nodes, ep)
+        mag = sum(dist.values())
+        for v in dist.keys():
+            dist[v] = dist[v]/mag
+        return dist
+    
+    def enumerate_all(self, vars : List[Variable_Node], e):
+        """Sum over all assignments to vars, fixing those in e."""
+        if not vars:
+            return 1.0
+        y = vars[0]
+        if y.name in e.keys():
+            return y.get_fully_conditioned_dist()[y.value]*self.enumerate_all(vars[1:], e)
+        else:
+            total = 0
+            for val in y.get_values():
+                y.value = val
+                total += y.get_fully_conditioned_dist()[y.value]*self.enumerate_all(vars[1:], e)
+            return total
+
+
 def main():
     coinFlip = Variable_Node(
         cdt=Discrete_CDT(
@@ -162,6 +258,14 @@ def main():
             ),
         name="resultCalled",
     )
+    cheatingDeclared = Variable_Node(
+        cdt=Discrete_CDT(
+            [coinFlip, resultCalled],
+            lambda r: {"Y":0.95, "N":0.05} if not r[0] == r[1] else {"Y":0.01, "N":0.99},
+            values=["Y","N"],
+        ),
+        name="cheatingDeclared",
+    )
     print(coinFlip)
     print(resultCalled)
     coinFlip.value = "H"
@@ -169,11 +273,14 @@ def main():
     resultDist = resultCalled.get_fully_conditioned_dist()
     for k in resultDist.keys():
         print("%s is %s with probability %.2f" % (resultCalled.name, k, resultDist[k]))
-    bn = Bayes_Net([coinFlip, resultCalled])
+    bn = Bayes_Net([coinFlip, cheatingDeclared, resultCalled])
     
-    print("Probability of H flipped and reported: %.3f" % (bn.P(["H","H"])))
-    print("Probability of H flipped but not reported: %.3f" % (bn.P(["H","T"])))
+    print("Probability of H flipped and reported: %.3f" % (bn.P(["H","H","Y"])+bn.P(["H","H","N"])))
+    print("Probability of H flipped but not reported: %.3f" % (bn.P(["H","T","Y"])+bn.P(["H","T","N"])))
     #print("Probability of H flipped given H reported: %f", )
+    print(
+        "Probability of H given result called is T and cheating is Y: %.3f" % (bn.enumeration_ask("coinFlip", {"resultCalled":"T", "cheatingDeclared":"Y"})["H"]),
+    )
 
 if __name__ == "__main__":
     main()
