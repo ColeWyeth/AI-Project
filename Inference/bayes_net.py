@@ -279,7 +279,19 @@ def main():
     print("Probability of H flipped but not reported: %.3f" % (bn.P(["H","T","Y"])+bn.P(["H","T","N"])))
     #print("Probability of H flipped given H reported: %f", )
     print(
+        "Probability of H given result called is H: %.3f" % (bn.enumeration_ask("coinFlip", {"resultCalled":"H"})["H"]),
+    )
+    print(
+        "Probability of H given result called is H and cheating is N: %.3f" % (bn.enumeration_ask("coinFlip", {"resultCalled":"H", "cheatingDeclared":"N"})["H"]),
+    )
+    print(
+        "Probability of H given result called is H and cheating is Y: %.3f" % (bn.enumeration_ask("coinFlip", {"resultCalled":"H", "cheatingDeclared":"Y"})["H"]),
+    )
+    print(
         "Probability of H given result called is T and cheating is Y: %.3f" % (bn.enumeration_ask("coinFlip", {"resultCalled":"T", "cheatingDeclared":"Y"})["H"]),
+    )
+    print(
+        "Probability of cheating given result called is H and H: %.3f" % (bn.enumeration_ask("cheatingDeclared", {"resultCalled":"H", "coinFlip":"H"})["Y"]),
     )
 
 if __name__ == "__main__":
