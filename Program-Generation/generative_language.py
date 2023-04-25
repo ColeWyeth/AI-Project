@@ -5,7 +5,9 @@ import random
 from typing import Dict, List
 
 from program import Program, Block, Box, run_for_time
-from cfg import CFG
+from cfg import CFG, PCFG, cfg_to_solomonoff_pcfg
+
+from matplotlib import pyplot as plt
 
 class Sym(enum.Enum):
     EXEC            = 1
@@ -74,7 +76,10 @@ Generative_Rules = {
 
     Sym.BOOL_EXP : [
         (Sym.COMP, []), # Note that this is empty because particular comps have children
-        (Sym.BOOL_OP, []),
+        # (Sym.BOOL_OP, []),
+        (Sym.AND, [Sym.BOOL_EXP, Sym.BOOL_EXP]),
+        (Sym.OR, [Sym.BOOL_EXP, Sym.BOOL_EXP]),
+        (Sym.NEG_BOOL, [Sym.BOOL_EXP]),
         (Sym.BOOL_BASIC, []),
     ],
 
@@ -83,11 +88,11 @@ Generative_Rules = {
         (Sym.EQUAL, [Sym.INT_EXP, Sym.INT_EXP]),
     ],
 
-    Sym.BOOL_OP : [
-        (Sym.AND, [Sym.BOOL_EXP, Sym.BOOL_EXP]),
-        (Sym.OR, [Sym.BOOL_EXP, Sym.BOOL_EXP]),
-        (Sym.NEG_BOOL, [Sym.BOOL_EXP]),
-    ],
+    # Sym.BOOL_OP : [
+    #     (Sym.AND, [Sym.BOOL_EXP, Sym.BOOL_EXP]),
+    #     (Sym.OR, [Sym.BOOL_EXP, Sym.BOOL_EXP]),
+    #     (Sym.NEG_BOOL, [Sym.BOOL_EXP]),
+    # ],
 
     Sym.BOOL_BASIC : [
         (Sym.TRUE, []),
@@ -98,14 +103,16 @@ Generative_Rules = {
     ],
 
     Sym.INT_EXP : [
-        (Sym.INT_OP, []),
+        (Sym.PLUS, [Sym.INT_EXP, Sym.INT_EXP]),
+        (Sym.MULT, [Sym.INT_EXP, Sym.INT_EXP]),
+        #(Sym.INT_OP, []),
         (Sym.INT_BASIC, []),
     ],
 
-    Sym.INT_OP : [
-        (Sym.PLUS, [Sym.INT_EXP, Sym.INT_EXP]),
-        (Sym.MULT, [Sym.INT_EXP, Sym.INT_EXP]),
-    ],
+    # Sym.INT_OP : [
+    #     (Sym.PLUS, [Sym.INT_EXP, Sym.INT_EXP]),
+    #     (Sym.MULT, [Sym.INT_EXP, Sym.INT_EXP]),
+    # ],
 
     Sym.INT_BASIC : [
         (Sym.ONE, []),
@@ -253,6 +260,21 @@ def random_block_search(g : CFG, p : Program, s : Sym = -1):
         b.var = random.choice(get_variable_options(p, b.symbol))
     return b
 
+def sample_pcfg(g : PCFG, p : Program, s : Sym = -1):
+    if s == -1:
+        s = g.start
+    nonterminals = g.rules.keys()
+    children = []
+    while s in nonterminals:
+        s, children = g.sample_rule(s)
+    b = Block(s)
+    for c in children:
+        # the children of a block should be blocks
+        b.children.append(sample_pcfg(g, p, c))
+    if b.symbol in variable_symbols:
+        b.var = random.choice(get_variable_options(p, b.symbol))
+    return b
+
 def function_search(g : CFG, p: Program, s : Sym = -1):
     """
         This search method imposes the requirement that after running some initial code,
@@ -280,7 +302,35 @@ def function_search(g : CFG, p: Program, s : Sym = -1):
     b.children.append(assignments)
     return b
 
+def function_sample(g : PCFG, p: Program, s : Sym = -1):
+    """
+        This search method imposes the requirement that after running some initial code,
+        each output variable is assigned to.
+    """
+    b = Block(Sym.SEQ)
+    b.children.append(sample_pcfg(g, p, s))
+    assignments = None
+    for int_output in p.outs[int]:
+        y = Block(Sym.WINDOW_INT)
+        y.var = int_output
+        assign = Block(Sym.GETS, [Block(Sym.INT_BINDING, [y, sample_pcfg(g, p, Sym.INT_EXP)])])
+        if assignments is None:
+            assignments = assign 
+        else:
+            assignments = Block(Sym.SEQ, [assignments, assign])
+    for bool_output in p.outs[bool]:
+        y = Block(Sym.WINDOW_BOOL)
+        y.var = bool_output
+        assign = Block(Sym.GETS, [Block(Sym.BOOL_BINDING, [y, sample_pcfg(g, p, Sym.BOOL_EXP)])])
+        if assignments is None:
+            assignments = assign 
+        else:
+            assignments = Block(Sym.SEQ, [assignments, assign])
+    b.children.append(assignments)
+    return b
+
 def main():
+    pcfg = cfg_to_solomonoff_pcfg(Generative)
     p = Program(
         {int: [Box(int, "X")], bool : [] },
         {int : [Box(int, "Y")], bool : []},
@@ -294,11 +344,19 @@ def main():
         p.set_input(int, "X", x)
         run_for_time(p, g_interpreter, 1)
         return p.get_output(int, "Y") == y
-    for i in range(1000):
+    lengths = [0 for i in range(20)]
+    for i in range(10000):
         try:
-            p.block = function_search(Generative, p)
+            #p.block = function_search(Generative, p)
+            # Exponential decay is very sharp with 5 bits needed for each 
+            # symbol. It would be much better to have less nonterminals. TODO
+            p.block = function_sample(pcfg, p)
+            #print(p.block)
+            lengths[p.block.length()] += 1
             passed = True
-            for x,y in [(3,9), (4,16), (5,25)]:
+            easy_test = [(3,3), (4,4), (5,5)]
+            hard_test = [(3,9), (4,16), (5,25)]
+            for x,y in hard_test:
                 if not test(x,y):
                     passed = False
                     break
@@ -307,6 +365,9 @@ def main():
                 break
         except RecursionError:
             print("Maximum recursion depth exceeded...")
+    print(lengths)
+    plt.bar(range(len(lengths)), lengths)
+    plt.show()
     print(g_to_str(p.block))
 
 if __name__ == "__main__":
