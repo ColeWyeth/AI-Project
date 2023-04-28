@@ -31,7 +31,7 @@ class Sym(enum.Enum):
     LESS            = 12
     EQUAL           = 13
 
-    BOOL_OP         = 14
+    #BOOL_OP         = 14
     AND             = 15
     OR              = 16
     NEG_BOOL        = 17
@@ -42,11 +42,11 @@ class Sym(enum.Enum):
     LOCAL_BOOL      = 21
     WINDOW_BOOL     = 22
     RAND_BOOL       = 23
-    NEXT_BIT        = 24
+    #NEXT_BIT        = 24
 
     INT_EXP         = 25
 
-    INT_OP          = 33
+    #INT_OP          = 33
     PLUS            = 34
     MULT            = 35
     # IND             = 36
@@ -330,7 +330,7 @@ def function_sample(g : PCFG, p: Program, s : Sym = -1):
     return b
 
 def main():
-    pcfg = cfg_to_solomonoff_pcfg(Generative)
+    pcfg = cfg_to_solomonoff_pcfg(Generative, True)
     p = Program(
         {int: [Box(int, "X")], bool : [] },
         {int : [Box(int, "Y")], bool : []},
@@ -351,12 +351,13 @@ def main():
             # Exponential decay is very sharp with 5 bits needed for each 
             # symbol. It would be much better to have less nonterminals. TODO
             p.block = function_sample(pcfg, p)
+            print(g_to_str(p.block))
             #print(p.block)
             lengths[p.block.length()] += 1
             passed = True
             easy_test = [(3,3), (4,4), (5,5)]
             hard_test = [(3,9), (4,16), (5,25)]
-            for x,y in hard_test:
+            for x,y in easy_test:
                 if not test(x,y):
                     passed = False
                     break
