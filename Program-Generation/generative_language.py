@@ -31,7 +31,7 @@ class Sym(enum.Enum):
     LESS            = 12
     EQUAL           = 13
 
-    #BOOL_OP         = 14
+    BOOL_OP         = 14
     AND             = 15
     OR              = 16
     NEG_BOOL        = 17
@@ -46,7 +46,7 @@ class Sym(enum.Enum):
 
     INT_EXP         = 25
 
-    #INT_OP          = 33
+    INT_OP          = 33
     PLUS            = 34
     MULT            = 35
     # IND             = 36
@@ -76,10 +76,10 @@ Generative_Rules = {
 
     Sym.BOOL_EXP : [
         (Sym.COMP, []), # Note that this is empty because particular comps have children
-        # (Sym.BOOL_OP, []),
-        (Sym.AND, [Sym.BOOL_EXP, Sym.BOOL_EXP]),
-        (Sym.OR, [Sym.BOOL_EXP, Sym.BOOL_EXP]),
-        (Sym.NEG_BOOL, [Sym.BOOL_EXP]),
+        (Sym.BOOL_OP, []),
+        # (Sym.AND, [Sym.BOOL_EXP, Sym.BOOL_EXP]),
+        # (Sym.OR, [Sym.BOOL_EXP, Sym.BOOL_EXP]),
+        # (Sym.NEG_BOOL, [Sym.BOOL_EXP]),
         (Sym.BOOL_BASIC, []),
     ],
 
@@ -88,11 +88,11 @@ Generative_Rules = {
         (Sym.EQUAL, [Sym.INT_EXP, Sym.INT_EXP]),
     ],
 
-    # Sym.BOOL_OP : [
-    #     (Sym.AND, [Sym.BOOL_EXP, Sym.BOOL_EXP]),
-    #     (Sym.OR, [Sym.BOOL_EXP, Sym.BOOL_EXP]),
-    #     (Sym.NEG_BOOL, [Sym.BOOL_EXP]),
-    # ],
+    Sym.BOOL_OP : [
+        (Sym.AND, [Sym.BOOL_EXP, Sym.BOOL_EXP]),
+        (Sym.OR, [Sym.BOOL_EXP, Sym.BOOL_EXP]),
+        (Sym.NEG_BOOL, [Sym.BOOL_EXP]),
+    ],
 
     Sym.BOOL_BASIC : [
         (Sym.TRUE, []),
@@ -103,16 +103,16 @@ Generative_Rules = {
     ],
 
     Sym.INT_EXP : [
-        (Sym.PLUS, [Sym.INT_EXP, Sym.INT_EXP]),
-        (Sym.MULT, [Sym.INT_EXP, Sym.INT_EXP]),
-        #(Sym.INT_OP, []),
+        # (Sym.PLUS, [Sym.INT_EXP, Sym.INT_EXP]),
+        # (Sym.MULT, [Sym.INT_EXP, Sym.INT_EXP]),
+        (Sym.INT_OP, []),
         (Sym.INT_BASIC, []),
     ],
 
-    # Sym.INT_OP : [
-    #     (Sym.PLUS, [Sym.INT_EXP, Sym.INT_EXP]),
-    #     (Sym.MULT, [Sym.INT_EXP, Sym.INT_EXP]),
-    # ],
+    Sym.INT_OP : [
+        (Sym.PLUS, [Sym.INT_EXP, Sym.INT_EXP]),
+        (Sym.MULT, [Sym.INT_EXP, Sym.INT_EXP]),
+    ],
 
     Sym.INT_BASIC : [
         (Sym.ONE, []),
@@ -357,7 +357,7 @@ def main():
             passed = True
             easy_test = [(3,3), (4,4), (5,5)]
             hard_test = [(3,9), (4,16), (5,25)]
-            for x,y in easy_test:
+            for x,y in hard_test:
                 if not test(x,y):
                     passed = False
                     break
