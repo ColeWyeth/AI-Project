@@ -1,13 +1,10 @@
-from base import *
 import enum
 import random
 
-from typing import Dict, List
+from program import Block
+from cfg import CFG
 
-from program import Program, Block, Box, run_for_time
-from cfg import CFG, PCFG, cfg_to_solomonoff_pcfg
-
-from matplotlib import pyplot as plt
+from language import Language
 
 class Sym(enum.Enum):
     EXEC            = 1
@@ -59,7 +56,7 @@ class Sym(enum.Enum):
     LOCAL_INT       = 31
     WINDOW_INT      = 32
 
-Generative_Rules = {
+Arithmetic_Rules = {
     Sym.EXEC: [
         (Sym.IF_THEN_ELSE, [Sym.BOOL_EXP, Sym.EXEC, Sym.EXEC]),
         (Sym.PASS, []),
@@ -124,7 +121,7 @@ Generative_Rules = {
 
 }
 
-Generative = CFG(Sym.EXEC, Generative_Rules)
+Arithmetic = CFG(Sym.EXEC, Arithmetic_Rules)
 
 variable_symbols = [
     Sym.LOCAL_BOOL,
@@ -157,13 +154,13 @@ def get_variable_options(p, s : Sym):
     else:
         raise Exception("Variable symbol optionless")
 
-def g_sugar(block, abstract_syntax):
+def a_sugar(block, abstract_syntax):
     if block.symbol in variable_symbols:
         return block.var.get_name()
     return abstract_syntax
     
-def g_to_str(block):
-    return Block.rec_block_printer(block, g_sugar)
+def a_to_str(block):
+    return Block.rec_block_printer(block, a_sugar)
 
 
 # The proper way to call an unbounded runtime block
@@ -209,167 +206,33 @@ def evaluate_bool(block):
     elif block.symbol == Sym.RAND_BOOL:
         return random.choice([True, False])
 
-def g_interpreter(block):
+def a_interpreter(block):
     if block.symbol == Sym.PASS:
         pass
     elif block.symbol == Sym.SEQ:
         for c in block.children:
-            g_interpreter(c)
+            a_interpreter(c)
     elif block.symbol == Sym.GETS:
-        g_interpreter(block.children[0])
+        a_interpreter(block.children[0])
     elif block.symbol == Sym.BOOL_BINDING:
         block.children[0].var.set(evaluate_bool(block.children[1]))
     elif block.symbol == Sym.INT_BINDING:
         block.children[0].var.set(evaluate_int(block.children[1]))
     elif block.symbol == Sym.IF_THEN_ELSE:
         if evaluate_bool(block.children[0]):
-            g_interpreter(block.children[1])
+            a_interpreter(block.children[1])
         else:
-            g_interpreter(block.children[2])
+            a_interpreter(block.children[2])
     elif block.symbol == Sym.WHILE:
         while evaluate_bool(block.children[0]):
-            g_interpreter(block.children[1])
+            a_interpreter(block.children[1])
     else:
         pass 
 
-
-# The combination of CFG and interpreter should "plug in" to the program class. Ideally the search process 
-# with also work for an arbitrary CFG and interpreter. 
-
-def random_block_search(g : CFG, p : Program, s : Sym = -1):
-    if s == -1:
-        s = g.start
-    nonterminals = g.rules.keys()
-    children = []
-    while s in nonterminals:
-        cand_s, children = random.choice(g.rules[s])
-        # Each length increase should have probability 1/2
-        # Roughly speaking, this means a symbol with n children
-        # should be 2^n times less likely. 
-        undo = False
-        for c in children:
-            undo = undo or random.choice([True, False])
-        if not undo:
-            s = cand_s
-        #s = cand_s
-    b = Block(s)
-    for c in children:
-        # the children of a block should be blocks
-        b.children.append(random_block_search(g, p, c))
-    if b.symbol in variable_symbols:
-        b.var = random.choice(get_variable_options(p, b.symbol))
-    return b
-
-def sample_pcfg(g : PCFG, p : Program, s : Sym = -1):
-    if s == -1:
-        s = g.start
-    nonterminals = g.rules.keys()
-    children = []
-    while s in nonterminals:
-        s, children = g.sample_rule(s)
-    b = Block(s)
-    for c in children:
-        # the children of a block should be blocks
-        b.children.append(sample_pcfg(g, p, c))
-    if b.symbol in variable_symbols:
-        b.var = random.choice(get_variable_options(p, b.symbol))
-    return b
-
-def function_search(g : CFG, p: Program, s : Sym = -1):
-    """
-        This search method imposes the requirement that after running some initial code,
-        each output variable is assigned to.
-    """
-    b = Block(Sym.SEQ)
-    b.children.append(random_block_search(g, p, s))
-    assignments = None
-    for int_output in p.outs[int]:
-        y = Block(Sym.WINDOW_INT)
-        y.var = int_output
-        assign = Block(Sym.GETS, [Block(Sym.INT_BINDING, [y, random_block_search(g, p, Sym.INT_EXP)])])
-        if assignments is None:
-            assignments = assign 
-        else:
-            assignments = Block(Sym.SEQ, [assignments, assign])
-    for bool_output in p.outs[bool]:
-        y = Block(Sym.WINDOW_BOOL)
-        y.var = bool_output
-        assign = Block(Sym.GETS, [Block(Sym.BOOL_BINDING, [y, random_block_search(g, p, Sym.BOOL_EXP)])])
-        if assignments is None:
-            assignments = assign 
-        else:
-            assignments = Block(Sym.SEQ, [assignments, assign])
-    b.children.append(assignments)
-    return b
-
-def function_sample(g : PCFG, p: Program, s : Sym = -1):
-    """
-        This search method imposes the requirement that after running some initial code,
-        each output variable is assigned to.
-    """
-    b = Block(Sym.SEQ)
-    b.children.append(sample_pcfg(g, p, s))
-    assignments = None
-    for int_output in p.outs[int]:
-        y = Block(Sym.WINDOW_INT)
-        y.var = int_output
-        assign = Block(Sym.GETS, [Block(Sym.INT_BINDING, [y, sample_pcfg(g, p, Sym.INT_EXP)])])
-        if assignments is None:
-            assignments = assign 
-        else:
-            assignments = Block(Sym.SEQ, [assignments, assign])
-    for bool_output in p.outs[bool]:
-        y = Block(Sym.WINDOW_BOOL)
-        y.var = bool_output
-        assign = Block(Sym.GETS, [Block(Sym.BOOL_BINDING, [y, sample_pcfg(g, p, Sym.BOOL_EXP)])])
-        if assignments is None:
-            assignments = assign 
-        else:
-            assignments = Block(Sym.SEQ, [assignments, assign])
-    b.children.append(assignments)
-    return b
-
-def main():
-    pcfg = cfg_to_solomonoff_pcfg(Generative, True)
-    p = Program(
-        {int: [Box(int, "X")], bool : [] },
-        {int : [Box(int, "Y")], bool : []},
-    )
-    for i in range(2):
-        p.add_int_local()
-    for i in range(2):
-        p.add_bool_local()
-    def test(x, y):
-        p.wipe_all_variables()
-        p.set_input(int, "X", x)
-        run_for_time(p, g_interpreter, 1)
-        return p.get_output(int, "Y") == y
-    lengths = [0 for i in range(20)]
-    for i in range(10000):
-        try:
-            #p.block = function_search(Generative, p)
-            # Exponential decay is very sharp with 5 bits needed for each 
-            # symbol. It would be much better to have less nonterminals. TODO
-            p.block = function_sample(pcfg, p)
-            print(g_to_str(p.block))
-            #print(p.block)
-            lengths[p.block.length()] += 1
-            passed = True
-            easy_test = [(3,3), (4,4), (5,5)]
-            hard_test = [(3,9), (4,16), (5,25)]
-            for x,y in hard_test:
-                if not test(x,y):
-                    passed = False
-                    break
-            if passed:
-                print("Successful candidate!")
-                break
-        except RecursionError:
-            print("Maximum recursion depth exceeded...")
-    print(lengths)
-    plt.bar(range(len(lengths)), lengths)
-    plt.show()
-    print(g_to_str(p.block))
-
-if __name__ == "__main__":
-    main()
+Arithmetic_Language = Language(
+    Arithmetic,
+    variable_symbols,
+    get_variable_options,
+    a_interpreter,
+    a_sugar,
+)

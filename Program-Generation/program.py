@@ -53,6 +53,8 @@ class Block:
         return result
     def __repr__(self):
         return Block.rec_block_printer(self)
+    def length(self):
+        return 1 + sum([c.length() for c in self.children])
         # if self.symbol == Sym.LOCAL_BOOL or self.symbol == Sym.LOCAL_INT:
         #     return self.var.get_name()
         # child_str = ""
